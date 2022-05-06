@@ -9,72 +9,87 @@ import torchvision.transforms as transforms
 from models.logistic_regression import LogisticRegressor
 
 
-def train(model, device, dataloader_train, dataloader_val, criterion, optimizer, epochs):
+def train(model, device, dataloader_train, dataloader_val, image_size, criterion, optimizer, epochs):
     """
+    Train a model.
+    Args:
+        model: model class
+        device: device to train the model
+        datalaoder_train: data loading module for training dataset
+        dataloader_val: data loading module for validation dataset
+        criterion: criterion to compute loss
+        optimizer: optimization algorithm to train the model
+        epochs: the number of epochs to train the model
     """
 
     for epoch in range(epochs):
         losses_train = []
         losses_valid = []
         train_num = 0
-        train_true_num = 0
+        train_acc = 0
         valid_num = 0
-        valid_true_num = 0
+        valid_acc = 0
 
         model.to(device)
         # set the model with train mode
         model.train()
-        for x, label in dataloader_train:
-            true = label.tolist()
-            one_hot = torch.eye(10)[label]
+        for x, labels in dataloader_train:
 
             x = x.to(device)
-            one_hot = one_hot.to(device)
+            labels = labels.to(device)
 
-            y_hat = torch.squeeze(model.forward(x))
+            # reshape input tensors to (batch_size, image_size) 
+            x = x.view(-1, image_size)
 
-            loss = criterion(y_hat, one_hot)
+            y_hat = model.forward(x)
+
+            loss = criterion(y_hat, labels)
+            
+            # back prop
+            optimizer.zero_grad()
+            loss.backward()
+
+            # update weights
+            optimizer.step()
 
             pred = torch.argmax(y_hat, dim=1)
 
             losses_train.append(loss.tolist())
 
-            acc = torch.where(label - pred.to("cpu") == 0, torch.ones_like(label), torch.zeros_like(label))
-            train_num += acc.size()[0]
-            train_true_num += acc.sum().item
-
+            train_num += x.size()[0]
+            train_acc += torch.sum(pred == labels).item()
 
         model.eval()
-        for x, label in dataloader_val:
-            # WRITE ME
-            true = label.tolist()
-            one_hot = torch.eye(10)[label]
+        for x, labels in dataloader_val:
 
             # put tensor on GPU
             x = x.to(device)
-            one_hot = one_hot.to(device)
+            labels = labels.to(device)
+            
+            # reshape input tensors to (batch_size, image_size)
+            x = x.view(-1, image_size)
 
             # forward prop
-            y_hat = torch.squeeze(model.forward(x))
+            y_hat = model.forward(x)
 
             # compute loss
-            loss = criterion(y_hat, one_hot)
+            loss = criterion(y_hat, labels)
 
             # output of the model
             pred = torch.argmax(y_hat, dim=1)
 
             losses_valid.append(loss.tolist())
 
-            acc = torch.where(t - pred.to("cpu") == 0, torch.ones_like(label), torch.zeros_like(label))
-            valid_num += acc.size()[0]
-            valid_true_num += acc.sum().item()
+            valid_num += x.size()[0]
+            valid_acc += torch.sum(pred == labels)
+
 
         print('EPOCH: {}, Train [Loss: {:.3f}, Accuracy: {:.3f}], Valid [Loss: {:.3f}, Accuracy: {:.3f}]'.format(
             epoch,
             np.mean(losses_train),
-            train_true_num/train_num,
+            train_acc/train_num,
             np.mean(losses_valid),
-            valid_true_num/valid_num
+            valid_acc/valid_num
         ))
 
 
@@ -83,16 +98,20 @@ if __name__ == "__main__":
 
     # transform image data to tensor compatible with pytorch
     to_tensor = transforms.ToTensor()
+    # normalize image data
+    normalize = transforms.Normalize((0.5, ), (0.5, ))
+    
+    transform = transforms.Compose([to_tensor, normalize])
 
     # load train and test dataset
     train_dataset = datasets.FashionMNIST(
-            root="/home/tatsu/dl_portfolio/mnist-fashion/dataset", train=True, transform=to_tensor, download=True
+            root="/home/tatsu/dl_portfolio/mnist-fashion/dataset", train=True, transform=transform, download=True
     )
     test_data = datasets.FashionMNIST(
-            root="/home/tatsu/dl_portfolio/mnist-fashion/dataset", train=False, transform=to_tensor, download=True
+            root="/home/tatsu/dl_portfolio/mnist-fashion/dataset", train=False, transform=transform, download=True
     )
     
-    train_dataset = train_dataset.reshape(-1, 784).astype("float32") / 255
+    #train_dataset = train_dataset.reshape(-1, 784).astype("float32") / 255
 
     # define batch size, validation dataset size
     batch_size = 64
@@ -123,8 +142,9 @@ if __name__ == "__main__":
 
     model = LogisticRegressor(784, 10)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    image_size = 28*28
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=1e-4, weight_decay=1e-5)
     epochs = 50
 
-    train(model, device, dataloader_train, dataloader_val, criterion, optimizer, epochs)
+    train(model, device, dataloader_train, dataloader_val, image_size, criterion, optimizer, epochs)
