@@ -11,7 +11,7 @@ class LogisticRegressor(nn.Module):
         self.linear = nn.Linear(in_dims, out_dims)
 
     def forward(self, x):
-        x = nn.functional.softmax(self.linear(x), dim=1)
+        x = self.linear(x)
         return x
 
 class MLP(nn.Module):
@@ -30,7 +30,7 @@ class MLP(nn.Module):
         x = nn.functional.leaky_relu(self.linear1(x))
         x = nn.functional.leaky_relu(self.linear2(x))
         x = nn.functional.leaky_relu(self.linear3(x))
-        x = nn.functional.softmax(self.linear4(x), dim=1)
+        x = self.linear4(x)
         return x
 
 class CNN(nn.Module):
@@ -70,7 +70,6 @@ class CNN(nn.Module):
             nn.LeakyReLU(),
             nn.Dropout(0.4),
             nn.Linear(64, 10),
-            nn.Softmax(dim=1)
         )
 
 
